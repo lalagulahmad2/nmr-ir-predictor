@@ -327,7 +327,7 @@ def generate_ir_spectrum(mol):
 
 SHOOLERY = {
     'alkyl': 0.47, 'vinyl': 1.32, 'alkynyl': 1.44, 'aryl': 1.85,
-    'F': 3.30, 'Cl': 2.53, 'Br': 2.33, 'I': 3.84,
+    'F': 3.30, 'Cl': 2.53, 'Br': 2.33, 'I': 1.82,
     'OR': 2.36, 'OH': 2.56, 'OAr': 3.23, 'OCOR': 3.01,
     'COR': 1.20, 'CHO': 1.03, 'COOH': 1.55, 'COOR': 1.55,
     'CONR': 1.03, 'CN': 1.70, 'NO2': 3.36,
@@ -484,10 +484,17 @@ def _aromatic_shift(c_atom, mol):
                 eff = 0.2 if nbr.GetHybridization().name == 'SP2' else -0.15
             elif an == 8: eff = -0.45
             elif an == 7: eff = -0.65
-            elif an == 9: eff = -0.20
+            elif an == 9:  eff = -0.20
             elif an == 17: eff = 0.03
             elif an == 35: eff = 0.22
-            elif an == 53: eff = 0.40
+            elif an == 53:
+                # Regular ArI: ortho +0.40, meta -0.26, para -0.65
+                # Hypervalent I(III): acts as EWG, all positions slightly downfield
+                n_bonds_i = len(nbr.GetBonds())
+                if n_bonds_i > 1:  # hypervalent (PIDA, DMP, etc.)
+                    eff = {1: 0.55, 2: 0.24, 3: 0.31}.get(dist, 0.0)
+                else:              # regular monoiodide (PhI, alkyl-I)
+                    eff = {1: 0.308, 2: -0.578, 3: -0.65}.get(dist, 0.0)
             if   dist == 1: base += eff * 1.3
             elif dist == 2: base += eff * 0.45
             elif dist == 3: base += eff * 1.0
@@ -791,7 +798,12 @@ def predict_c_shift(c_atom, mol):
             if an == 8: shift += 28
             elif an == 7: shift -= 8
             elif an == 6 and nbr.GetHybridization() == rdchem.HybridizationType.SP2: shift += 8
-            elif an in (9, 17, 35): shift += 4
+            elif an == 9:  shift += 30   # ArF ipso ~159 ppm
+            elif an == 17: shift += 5    # ArCl ipso ~134 ppm
+            elif an == 35: shift -= 7    # ArBr ipso ~122 ppm
+            elif an == 53:               # heavy-atom effect on ipso C
+                n_bonds_i = len(nbr.GetBonds())
+                shift += (5 if n_bonds_i > 1 else -38)  # hypervalent ~134, regular ~91 ppm
         return shift
 
     # sp2 (C=O or C=C)
@@ -841,7 +853,7 @@ def predict_c_shift(c_atom, mol):
         elif an == 9: shift += 65
         elif an == 17: shift += 30
         elif an == 35: shift += 22
-        elif an == 53: shift -= 5
+        elif an == 53: shift -= 35   # heavy-atom upfield shift (CH₃I: ~−20 ppm)
         elif an == 16: shift += 18
 
     # Beta O/N/X (smaller effect)
