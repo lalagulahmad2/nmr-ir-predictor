@@ -1,0 +1,1347 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NMR & IR Spectrum Predictor</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+/* ─────────────────────────────────────────────
+   THEME VARIABLES
+───────────────────────────────────────────── */
+:root {
+  --bg:       #0d0f1a;
+  --surface:  #161929;
+  --surface2: #1e2238;
+  --surface3: #262b42;
+  --border:   #2c3154;
+  --accent:   #6478f2;
+  --accent2:  #8b5cf6;
+  --accentRGB:100,120,242;
+  --text:     #dde0f5;
+  --text2:    #7880aa;
+  --text3:    #4a5078;
+  --green:    #34d399;
+  --yellow:   #fbbf24;
+  --red:      #f87171;
+  --shadow:   0 4px 24px rgba(0,0,0,.45);
+  --shadow-sm:0 2px 8px rgba(0,0,0,.3);
+}
+:root[data-theme="light"] {
+  --bg:       #f0f3ff;
+  --surface:  #ffffff;
+  --surface2: #f5f7ff;
+  --surface3: #eaedff;
+  --border:   #cdd2f0;
+  --accent:   #4a5ff0;
+  --accent2:  #7c3aed;
+  --accentRGB:74,95,240;
+  --text:     #111630;
+  --text2:    #4a5278;
+  --text3:    #8890b8;
+  --green:    #059669;
+  --yellow:   #d97706;
+  --red:      #dc2626;
+  --shadow:   0 4px 24px rgba(0,0,0,.10);
+  --shadow-sm:0 2px 8px rgba(0,0,0,.07);
+}
+
+/* ─────────────────────────────────────────────
+   RESET & BASE
+───────────────────────────────────────────── */
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+html, body {
+  height: 100%;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+body { display:flex; flex-direction:column; }
+
+/* ─────────────────────────────────────────────
+   HEADER
+───────────────────────────────────────────── */
+.header {
+  flex-shrink: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: var(--shadow-sm);
+  z-index: 10;
+}
+.header-logo {
+  width: 34px; height: 34px; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px;
+}
+.header-title { font-size: 1.05rem; font-weight: 700; letter-spacing: -.3px; }
+.header-sub   { font-size: 0.72rem; color: var(--text2); margin-top: 1px; }
+.header-spacer { flex: 1; }
+.header-actions { display: flex; align-items: center; gap: 8px; }
+
+/* ─────────────────────────────────────────────
+   ICON BUTTON (theme toggle, print)
+───────────────────────────────────────────── */
+.icon-btn {
+  width: 36px; height: 36px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text2);
+  font-size: 15px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s, color .15s, border-color .15s;
+  flex-shrink: 0;
+}
+.icon-btn:hover { background: var(--surface3); color: var(--text); border-color: var(--text3); }
+.icon-btn.active { color: var(--accent); border-color: var(--accent); background: rgba(var(--accentRGB),.1); }
+
+/* ─────────────────────────────────────────────
+   LAYOUT
+───────────────────────────────────────────── */
+.layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ─────────────────────────────────────────────
+   LEFT PANEL
+───────────────────────────────────────────── */
+.left-panel {
+  width: 300px;
+  min-width: 300px;
+  min-height: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── TAB BAR ── */
+.tab-bar {
+  flex-shrink: 0;
+  display: flex;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+}
+.tab-btn {
+  flex: 1;
+  padding: 10px 0;
+  background: none; border: none;
+  color: var(--text2);
+  font-size: 0.8rem; font-weight: 600;
+  letter-spacing: .3px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: color .15s;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-btn:hover:not(.active) { color: var(--text); }
+
+/* ── TAB PANELS ── */
+.tab-panel { display: none; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+.tab-panel.active { display: flex; }
+
+/* ── DRAW TAB ── */
+#tab-draw { flex: 1; min-height: 0; }
+
+.editor-card {
+  flex: 0 0 auto;
+  height: 380px;
+  margin: 12px 12px 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1.5px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+  transition: border-color .2s;
+}
+.editor-card:focus-within { border-color: var(--accent); }
+
+.editor-topbar {
+  flex-shrink: 0;
+  height: 28px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  display: flex; align-items: center;
+  padding: 0 10px;
+  gap: 6px;
+}
+.editor-topbar .dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: rgba(255,255,255,.4);
+}
+.editor-topbar span {
+  font-size: 0.68rem; font-weight: 700;
+  color: rgba(255,255,255,.85);
+  letter-spacing: .6px; text-transform: uppercase;
+  margin-left: 2px;
+}
+
+.jsme-wrap { flex: 1; min-height: 0; position: relative; }
+#jsme_container { position: absolute; inset: 0; }
+
+/* ── DRAW FOOTER ── */
+.draw-footer {
+  flex-shrink: 0;
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.smiles-pill {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+  transition: color .2s;
+  min-height: 30px;
+  display: flex; align-items: center;
+}
+.smiles-pill.has-mol { color: var(--text); }
+
+.btn-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* ─────────────────────────────────────────────
+   BUTTONS
+───────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 6px;
+  border: none; border-radius: 8px;
+  font-size: 0.83rem; font-weight: 600; cursor: pointer;
+  transition: opacity .15s, transform .1s, background .15s;
+  white-space: nowrap;
+}
+.btn:active { transform: scale(.97); }
+.btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: #fff;
+  padding: 9px 20px;
+  flex: 1;
+  box-shadow: 0 2px 12px rgba(var(--accentRGB),.35);
+}
+.btn-primary:hover:not(:disabled) { opacity: .88; }
+
+.btn-secondary {
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  color: var(--text2);
+  padding: 8px 14px;
+}
+.btn-secondary:hover { background: var(--surface3); color: var(--text); border-color: var(--text3); }
+
+/* ── ERROR BOX ── */
+.error-box {
+  background: rgba(248,113,113,.1);
+  border: 1px solid rgba(248,113,113,.3);
+  border-radius: 7px; padding: 9px 12px;
+  color: var(--red); font-size: 0.8rem;
+  display: none;
+}
+
+/* ── SPINNER ── */
+.spinner {
+  width: 18px; height: 18px; flex-shrink: 0;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .6s linear infinite;
+  display: none;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── SMILES TAB ── */
+#tab-smiles { overflow-y: auto; padding: 16px 14px; gap: 16px; }
+
+.field-label {
+  font-size: 0.68rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .8px;
+  color: var(--text2); display: block; margin-bottom: 6px;
+}
+
+.smiles-row { display: flex; gap: 7px; align-items: center; }
+.smiles-row input {
+  flex: 1;
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.85rem; padding: 9px 11px;
+  font-family: 'Courier New', monospace;
+  outline: none;
+  transition: border-color .2s;
+}
+.smiles-row input:focus { border-color: var(--accent); }
+.smiles-row input::placeholder { color: var(--text3); }
+
+.examples { display: flex; flex-wrap: wrap; gap: 5px; }
+.ex-btn {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text2);
+  font-size: 0.71rem; padding: 4px 9px; cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.ex-btn:hover { background: var(--surface3); color: var(--text); border-color: var(--text3); }
+
+/* Info cards */
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.info-card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 12px;
+}
+.info-card .k { font-size: 0.64rem; color: var(--text2); font-weight: 700; text-transform: uppercase; letter-spacing: .7px; }
+.info-card .v { font-size: 1.0rem; font-weight: 700; margin-top: 3px; }
+
+/* FG tags */
+.fg-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.fg-tag {
+  background: rgba(var(--accentRGB),.1);
+  border: 1px solid rgba(var(--accentRGB),.3);
+  border-radius: 5px; font-size: 0.68rem; padding: 2px 7px;
+  color: var(--accent);
+}
+
+/* Mol info inside draw tab */
+.draw-info {
+  display: none;
+  flex-shrink: 0;
+  padding: 0 12px 12px;
+  gap: 6px;
+  flex-direction: column;
+}
+.draw-info.visible { display: flex; }
+
+/* ─────────────────────────────────────────────
+   RIGHT PANEL
+───────────────────────────────────────────── */
+.right-panel {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* SDBS reference bar */
+.sdbs-bar {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 14px;
+  margin-bottom: 4px;
+  font-size: 0.8rem;
+  color: var(--text2);
+  flex-wrap: wrap;
+}
+.sdbs-bar.visible { display: flex; }
+.sdbs-bar strong { color: var(--text); font-size: 0.85rem; }
+.sdbs-link {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  text-decoration: none;
+  transition: background .15s;
+  white-space: nowrap;
+}
+.sdbs-link:hover { background: var(--border); color: var(--accent2); }
+
+/* Placeholder */
+.placeholder {
+  flex: 1;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 14px; text-align: center; color: var(--text2);
+  padding: 40px;
+}
+.placeholder .icon { font-size: 2.8rem; opacity: .3; }
+.placeholder p { font-size: 0.87rem; max-width: 300px; line-height: 1.6; }
+
+/* Spectrum section card */
+.spec-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+}
+.spec-header {
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 18px;
+  display: flex; align-items: center; gap: 10px;
+}
+.spec-badge {
+  background: rgba(var(--accentRGB),.15);
+  border: 1px solid rgba(var(--accentRGB),.35);
+  border-radius: 5px; font-size: 0.65rem; font-weight: 800;
+  padding: 2px 7px; color: var(--accent); letter-spacing: .5px;
+  white-space: nowrap;
+}
+.spec-header h2 { font-size: 0.92rem; font-weight: 600; }
+.spec-header .sig { font-size: 0.75rem; color: var(--text2); margin-left: auto; }
+/* SDBS source badge */
+.src-badge {
+  font-size: 0.65rem; font-weight: 700; padding: 2px 7px;
+  border-radius: 5px; white-space: nowrap; letter-spacing: .4px;
+  border: 1px solid; transition: background .3s, color .3s;
+}
+.src-badge.sdbs     { background: rgba(52,211,153,.15); border-color: rgba(52,211,153,.4); color: #34d399; }
+.src-badge.checking { background: rgba(251,191,36,.12); border-color: rgba(251,191,36,.3); color: var(--yellow); }
+.src-badge.predicted{ background: rgba(var(--accentRGB),.1); border-color: rgba(var(--accentRGB),.25); color: var(--accent); }
+
+.chart-area { padding: 6px 2px 2px; }
+
+/* Peak tables */
+.peak-table-wrap {
+  border-top: 1px solid var(--border);
+  max-height: 200px; overflow-y: auto;
+}
+table { width: 100%; border-collapse: collapse; font-size: 0.79rem; }
+th {
+  background: var(--surface2); color: var(--text2);
+  padding: 7px 14px; text-align: left;
+  font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .6px; position: sticky; top: 0;
+  border-bottom: 1px solid var(--border);
+}
+td { padding: 6px 14px; border-bottom: 1px solid rgba(44,49,84,.4); }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(var(--accentRGB),.04); }
+
+.dept-C   { color: var(--text2); }
+.dept-CH  { color: var(--accent); }
+.dept-CH2 { color: var(--green); }
+.dept-CH3 { color: var(--yellow); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ─────────────────────────────────────────────
+   PRINT STYLES (only apply when printing)
+───────────────────────────────────────────── */
+@media print {
+  * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ HEADER ═══ -->
+<header class="header">
+  <div class="header-logo">⚗️</div>
+  <div>
+    <div class="header-title">NMR &amp; IR Spectrum Predictor</div>
+    <div class="header-sub">Draw a structure or enter SMILES to predict ¹H NMR, ¹³C NMR &amp; IR</div>
+  </div>
+  <div class="header-spacer"></div>
+  <div class="header-actions">
+    <button class="icon-btn" id="print-btn" title="Print report" onclick="printReport()" style="display:none">🖨️</button>
+    <button class="icon-btn" id="theme-btn" title="Toggle light/dark mode" onclick="toggleTheme()">☀️</button>
+  </div>
+</header>
+
+<!-- ═══ LAYOUT ═══ -->
+<div class="layout">
+
+  <!-- ─── LEFT PANEL ─── -->
+  <div class="left-panel">
+
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tab-draw-btn" onclick="switchTab('draw')">✏️ Draw Structure</button>
+      <button class="tab-btn"        id="tab-smiles-btn" onclick="switchTab('smiles')">⌨️ SMILES</button>
+    </div>
+
+    <!-- DRAW TAB -->
+    <div class="tab-panel active" id="tab-draw">
+      <div class="editor-card" style="background:#fff">
+        <iframe id="ketcher-frame"
+                src="/static/remote/index.html"
+                style="flex:1;width:100%;border:none;display:block;min-height:0"
+                frameborder="0">
+        </iframe>
+      </div>
+
+      <div class="draw-footer">
+        <div class="smiles-pill" id="smiles-pill">Draw a molecule above…</div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="clearEditor()">🗑 Clear</button>
+          <div class="spinner" id="spin-draw"></div>
+          <button class="btn btn-primary" id="btn-draw" onclick="predictFromDraw()">▶ Predict Spectra</button>
+        </div>
+        <div class="error-box" id="err-draw"></div>
+      </div>
+
+      <div class="draw-info" id="draw-info">
+        <div class="info-grid">
+          <div class="info-card"><div class="k">Formula</div><div class="v" id="d-formula">–</div></div>
+          <div class="info-card"><div class="k">Exact MW</div><div class="v" id="d-mw">–</div></div>
+        </div>
+        <div class="fg-list" id="d-fg"></div>
+      </div>
+    </div>
+
+    <!-- SMILES TAB -->
+    <div class="tab-panel" id="tab-smiles">
+      <div>
+        <label class="field-label">SMILES string</label>
+        <div class="smiles-row">
+          <input id="smiles-in" type="text" placeholder="e.g. CC(=O)Oc1ccccc1C(=O)O" />
+          <div class="spinner" id="spin-smiles"></div>
+          <button class="btn btn-primary" id="btn-smiles" onclick="predictFromSmiles()" style="flex:0;padding:9px 16px">Run</button>
+        </div>
+        <div class="error-box" id="err-smiles" style="margin-top:8px"></div>
+      </div>
+
+      <div>
+        <label class="field-label">Quick Examples</label>
+        <div class="examples">
+          <button class="ex-btn" onclick="loadExample('CC(=O)Oc1ccccc1C(=O)O')">Aspirin</button>
+          <button class="ex-btn" onclick="loadExample('c1ccccc1')">Benzene</button>
+          <button class="ex-btn" onclick="loadExample('CCO')">Ethanol</button>
+          <button class="ex-btn" onclick="loadExample('CC(=O)C')">Acetone</button>
+          <button class="ex-btn" onclick="loadExample('CC(=O)O')">Acetic acid</button>
+          <button class="ex-btn" onclick="loadExample('CCCCCCCCCCCCCCCC(=O)O')">Palmitic acid</button>
+          <button class="ex-btn" onclick="loadExample('CC(C)CC1=CC=C(C=C1)C(C)C(=O)O')">Ibuprofen</button>
+          <button class="ex-btn" onclick="loadExample('CN1C=NC2=C1C(=O)N(C(=O)N2C)C')">Caffeine</button>
+          <button class="ex-btn" onclick="loadExample('OC(=O)c1ccc(O)cc1')">4-HBA</button>
+          <button class="ex-btn" onclick="loadExample('C1=CC=C(C=C1)C#N')">Benzonitrile</button>
+          <button class="ex-btn" onclick="loadExample('[O-][N+](=O)c1ccccc1')">Nitrobenzene</button>
+          <button class="ex-btn" onclick="loadExample('C=CC')">Propene</button>
+          <button class="ex-btn" onclick="loadExample('CCCC#CC')">Hex-2-yne</button>
+          <button class="ex-btn" onclick="loadExample('CC(N)C(=O)O')">Alanine</button>
+          <button class="ex-btn" onclick="loadExample('c1ccc(cc1)Cl')">Chlorobenzene</button>
+          <button class="ex-btn" onclick="loadExample('C1CCCCC1')">Cyclohexane</button>
+          <button class="ex-btn" onclick="loadExample('O=C1CCCCC1')">Cyclohexanone</button>
+        </div>
+      </div>
+
+      <div id="s-info" style="display:none">
+        <label class="field-label">Molecular Info</label>
+        <div class="info-grid">
+          <div class="info-card"><div class="k">Formula</div><div class="v" id="s-formula">–</div></div>
+          <div class="info-card"><div class="k">Exact MW</div><div class="v" id="s-mw">–</div></div>
+        </div>
+      </div>
+      <div id="s-fg-wrap" style="display:none">
+        <label class="field-label">Functional Groups</label>
+        <div class="fg-list" id="s-fg"></div>
+      </div>
+    </div>
+
+  </div><!-- /left-panel -->
+
+  <!-- ─── RIGHT PANEL ─── -->
+  <div class="right-panel" id="right-panel">
+    <div class="placeholder" id="placeholder">
+      <div class="icon">🧪</div>
+      <p>Draw a bond-line structure on the left (or use the SMILES tab) and click <strong>Predict Spectra</strong>.</p>
+    </div>
+
+    <!-- SDBS reference bar -->
+    <div class="sdbs-bar" id="sdbs-bar">
+      <span>🔬</span>
+      <span>Cross-reference with real experimental spectra on <strong>SDBS</strong> (AIST, Japan)</span>
+      <a id="sdbs-link" class="sdbs-link" href="#" target="_blank" rel="noopener">
+        Search SDBS ↗
+      </a>
+    </div>
+
+    <!-- 1H NMR -->
+    <div class="spec-card" id="hnmr-card" style="display:none">
+      <div class="spec-header">
+        <span class="spec-badge">¹H NMR</span>
+        <h2>Proton NMR Spectrum</h2>
+        <span class="src-badge predicted" id="hnmr-src-badge" style="display:none">⚗ Predicted</span>
+        <span class="sig" id="hnmr-sig"></span>
+      </div>
+      <div class="chart-area"><div id="hnmr-plot" style="height:250px"></div></div>
+      <div class="peak-table-wrap">
+        <table>
+          <thead><tr><th>δ (ppm)</th><th>Multiplicity</th><th>J (Hz)</th><th>Integration</th></tr></thead>
+          <tbody id="hnmr-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 13C NMR -->
+    <div class="spec-card" id="cnmr-card" style="display:none">
+      <div class="spec-header">
+        <span class="spec-badge">¹³C NMR</span>
+        <h2>Carbon NMR Spectrum</h2>
+        <span class="src-badge predicted" id="cnmr-src-badge" style="display:none">⚗ Predicted</span>
+        <span class="sig" id="cnmr-sig"></span>
+      </div>
+      <div class="chart-area"><div id="cnmr-plot" style="height:230px"></div></div>
+      <div class="peak-table-wrap">
+        <table>
+          <thead><tr><th>δ (ppm)</th><th>DEPT</th><th>Equiv. C</th></tr></thead>
+          <tbody id="cnmr-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- IR -->
+    <div class="spec-card" id="ir-card" style="display:none">
+      <div class="spec-header">
+        <span class="spec-badge">IR</span>
+        <h2>Infrared Spectrum</h2>
+        <span class="sig">Simulated · 4000–400 cm⁻¹</span>
+      </div>
+      <div class="chart-area"><div id="ir-plot" style="height:290px"></div></div>
+      <div class="peak-table-wrap">
+        <table>
+          <thead><tr><th>ν̃ (cm⁻¹)</th><th>Assignment</th><th>Intensity</th></tr></thead>
+          <tbody id="ir-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /right-panel -->
+
+</div><!-- /layout -->
+
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────
+// THEME
+// ─────────────────────────────────────────────
+const root = document.documentElement;
+(function () {
+  const saved = localStorage.getItem('nmr-theme') || 'dark';
+  root.setAttribute('data-theme', saved);
+  document.getElementById('theme-btn').textContent = saved === 'dark' ? '☀️' : '🌙';
+})();
+
+function toggleTheme() {
+  const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  root.setAttribute('data-theme', next);
+  document.getElementById('theme-btn').textContent = next === 'dark' ? '☀️' : '🌙';
+  localStorage.setItem('nmr-theme', next);
+  // Redraw charts if data exists
+  if (lastData) { renderAll(lastData); }
+}
+
+// ─────────────────────────────────────────────
+// KETCHER SETUP
+// ─────────────────────────────────────────────
+let ketcherReady = false;
+const ketcherFrame = document.getElementById('ketcher-frame');
+
+function _onKetcherReady() {
+  if (ketcherReady) return;
+  ketcherReady = true;
+  setInterval(pollSmiles, 1500);
+}
+
+// Catch the init postMessage from the iframe
+window.addEventListener('message', function(event) {
+  if (event.data && event.data.eventType === 'init') {
+    _onKetcherReady();
+  }
+});
+
+// Fallback: poll until ketcher object appears in iframe
+(function waitForKetcher() {
+  const k = ketcherFrame.contentWindow && ketcherFrame.contentWindow.ketcher;
+  if (k && typeof k.getSmiles === 'function') {
+    _onKetcherReady();
+  } else {
+    setTimeout(waitForKetcher, 300);
+  }
+})();
+
+async function getKetcher() {
+  return ketcherFrame.contentWindow.ketcher;
+}
+
+async function loadMolIntoKetcher(smiles) {
+  if (!ketcherReady) return;
+  try {
+    // Convert SMILES to MOL block first (Ketcher handles MOL reliably)
+    const resp = await fetch('/v2/indigo/convert', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({struct: smiles, output_format: 'chemical/x-mdl-molfile'})
+    });
+    const data = await resp.json();
+    if (data.struct) {
+      const ketcher = await getKetcher();
+      await ketcher.setMolecule(data.struct);
+    }
+  } catch(_) {}
+}
+
+async function pollSmiles() {
+  if (!ketcherReady) return;
+  try {
+    const ketcher = await getKetcher();
+    const smi = await ketcher.getSmiles();
+    const pill = document.getElementById('smiles-pill');
+    if (smi && smi.trim() && smi !== 'error') {
+      pill.textContent = smi;
+      pill.classList.add('has-mol');
+    } else {
+      pill.textContent = 'Draw a molecule above…';
+      pill.classList.remove('has-mol');
+    }
+  } catch (_) {}
+}
+
+async function clearEditor() {
+  if (ketcherReady) {
+    try {
+      const ketcher = await getKetcher();
+      await ketcher.setMolecule('');
+    } catch (_) {}
+  }
+  const pill = document.getElementById('smiles-pill');
+  pill.textContent = 'Draw a molecule above…';
+  pill.classList.remove('has-mol');
+}
+
+// ─────────────────────────────────────────────
+// TABS
+// ─────────────────────────────────────────────
+function switchTab(t) {
+  ['draw','smiles'].forEach(id => {
+    document.getElementById('tab-' + id).classList.toggle('active', id === t);
+    document.getElementById('tab-' + id + '-btn').classList.toggle('active', id === t);
+  });
+}
+
+// ─────────────────────────────────────────────
+// EXAMPLES
+// ─────────────────────────────────────────────
+async function loadExample(smiles) {
+  switchTab('draw');
+  document.getElementById('smiles-in').value = smiles;
+  if (ketcherReady) {
+    await loadMolIntoKetcher(smiles);
+    const pill = document.getElementById('smiles-pill');
+    pill.textContent = smiles;
+    pill.classList.add('has-mol');
+  }
+}
+
+// ─────────────────────────────────────────────
+// PREDICT
+// ─────────────────────────────────────────────
+let lastData = null;
+
+async function predictFromDraw() {
+  if (!ketcherReady) { showErr('draw','Editor not ready — please wait.'); return; }
+  try {
+    const ketcher = await getKetcher();
+    const mol = await ketcher.getMolfile();
+    if (!mol || !mol.trim() || mol.indexOf('M  END') === -1) { showErr('draw','Please draw a molecule first.'); return; }
+    // Convert MOL → SMILES via server
+    const resp = await fetch('/v2/indigo/convert', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({struct: mol, output_format: 'chemical/x-daylight-smiles'})
+    });
+    const data = await resp.json();
+    const smi = data.struct;
+    if (!smi || !smi.trim()) { showErr('draw','Could not convert structure to SMILES.'); return; }
+    await runPredict(smi, 'draw');
+  } catch(e) { showErr('draw', 'Could not read structure: ' + e.message); }
+}
+
+async function predictFromSmiles() {
+  const smi = document.getElementById('smiles-in').value.trim();
+  if (!smi) { showErr('smiles','Please enter a SMILES string.'); return; }
+  await runPredict(smi, 'smiles');
+}
+
+document.getElementById('smiles-in').addEventListener('keydown', e => {
+  if (e.key === 'Enter') predictFromSmiles();
+});
+
+async function runPredict(smiles, src) {
+  const btnId = src === 'draw' ? 'btn-draw' : 'btn-smiles';
+  const spinId = src === 'draw' ? 'spin-draw' : 'spin-smiles';
+  clearErr(src);
+  document.getElementById(btnId).disabled = true;
+  document.getElementById(spinId).style.display = 'inline-block';
+
+  try {
+    const res = await fetch('/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ smiles })
+    });
+    const data = await res.json();
+    if (data.error) { showErr(src, data.error); return; }
+
+    lastData = data;
+
+    // Populate mol info
+    if (src === 'draw') {
+      document.getElementById('d-formula').textContent = data.formula;
+      document.getElementById('d-mw').textContent = data.mw + ' Da';
+      document.getElementById('d-fg').innerHTML = data.fg.map(fgTag).join('');
+      document.getElementById('draw-info').classList.add('visible');
+    } else {
+      document.getElementById('s-formula').textContent = data.formula;
+      document.getElementById('s-mw').textContent = data.mw + ' Da';
+      document.getElementById('s-fg').innerHTML = data.fg.map(fgTag).join('');
+      document.getElementById('s-info').style.display = 'block';
+      document.getElementById('s-fg-wrap').style.display = 'block';
+      await loadMolIntoKetcher(smiles);
+    }
+
+    // SDBS reference bar
+    const sdbsFormula = encodeURIComponent(data.formula);
+    document.getElementById('sdbs-link').href =
+      `https://sdbs.db.aist.go.jp/sdbs/cgi-bin/cre_index.cgi?lang=eng&indx=sdbs&key=suf&word=${sdbsFormula}`;
+    document.getElementById('sdbs-bar').classList.add('visible');
+
+    // Source badges — show "Checking SDBS" while background job runs
+    _setSrcBadge('hnmr', data.sdbs_job ? 'checking' : 'predicted');
+    _setSrcBadge('cnmr', 'predicted');
+    if (data.sdbs_job) { _pollSdbs(data.sdbs_job); }
+
+    document.getElementById('placeholder').style.display = 'none';
+    ['hnmr-card','cnmr-card','ir-card'].forEach(id =>
+      document.getElementById(id).style.display = 'block');
+
+    renderAll(data);
+    document.getElementById('right-panel').scrollTop = 0;
+    document.getElementById('print-btn').style.display = 'flex';
+
+  } catch(e) {
+    showErr(src, 'Network error: ' + e.message);
+  } finally {
+    document.getElementById(btnId).disabled = false;
+    document.getElementById(spinId).style.display = 'none';
+  }
+}
+
+const fgTag = g => `<span class="fg-tag">${g.replace(/_/g,' ')}</span>`;
+
+function showErr(src, msg) {
+  const el = document.getElementById('err-' + src);
+  el.textContent = msg; el.style.display = 'block';
+}
+function clearErr(src) {
+  const el = document.getElementById('err-' + src);
+  el.textContent = ''; el.style.display = 'none';
+}
+
+// ─────────────────────────────────────────────
+// PLOTLY THEME HELPERS
+// ─────────────────────────────────────────────
+function plotColors() {
+  const s = getComputedStyle(document.documentElement);
+  return {
+    bg:      'rgba(0,0,0,0)',
+    grid:    s.getPropertyValue('--border').trim(),
+    tick:    s.getPropertyValue('--text2').trim(),
+    font:    s.getPropertyValue('--text2').trim(),
+    hover_bg:s.getPropertyValue('--surface').trim(),
+    trace_h: s.getPropertyValue('--accent').trim(),
+    trace_c: s.getPropertyValue('--accent').trim(),
+    trace_ir:s.getPropertyValue('--green').trim(),
+  };
+}
+
+function baseLayout(c) {
+  return {
+    paper_bgcolor: c.bg, plot_bgcolor: c.bg,
+    font: { color: c.font, family: "'Inter','Segoe UI',system-ui,sans-serif", size: 11 },
+    margin: { t: 8, r: 14, b: 44, l: 54 },
+    xaxis: { gridcolor: c.grid, linecolor: c.grid, tickcolor: c.grid, showgrid: true, zeroline: false },
+    yaxis: { gridcolor: c.grid, linecolor: c.grid, tickcolor: c.grid, showgrid: true, zeroline: false },
+    hoverlabel: { bgcolor: c.hover_bg, bordercolor: c.grid, font: { color: c.font } },
+  };
+}
+
+const CFG = { displayModeBar: false, responsive: true };
+
+// ─────────────────────────────────────────────
+// RENDER ALL
+// ─────────────────────────────────────────────
+function renderAll(data) {
+  renderHnmr(data.hnmr);
+  renderCnmr(data.cnmr);
+  renderIr(data.ir);
+}
+
+// ─────────────────────────────────────────────
+// 1H NMR
+// ─────────────────────────────────────────────
+function renderHnmr(d) {
+  const c = plotColors();
+  const xs = [], ys = [];
+  for (let i = 0; i < d.x.length; i += 4) { xs.push(d.x[i]); ys.push(d.y[i]); }
+
+  const hLayout = {
+    ...baseLayout(c),
+    xaxis: { ...baseLayout(c).xaxis, autorange: false, range: [13, -0.3],
+             title: { text: 'Chemical shift (ppm)', standoff: 5 } },
+    yaxis: { ...baseLayout(c).yaxis, range: [0, 1.15],
+             title: { text: 'Intensity', standoff: 5 } },
+  };
+  Plotly.newPlot('hnmr-plot', [{
+    x: xs, y: ys, type: 'scatter', mode: 'lines',
+    line: { color: c.trace_h, width: 1.6 },
+    fill: 'tozeroy', fillcolor: hexAlpha(c.trace_h, 0.07),
+    hovertemplate: '%{x:.3f} ppm<extra></extra>',
+  }], hLayout, CFG);
+  document.getElementById('hnmr-plot').on('plotly_doubleclick', function() {
+    Plotly.relayout('hnmr-plot', {'xaxis.range': [13, -0.3], 'xaxis.autorange': false});
+  });
+
+  // Table with J values
+  document.getElementById('hnmr-tbody').innerHTML = d.peaks.map(p => {
+    const jStr = p.j && p.j.length ? p.j.map(v => v.toFixed(1)).join(', ') + ' Hz' : '–';
+    return `<tr>
+      <td>${p.shift.toFixed(2)}</td>
+      <td>${p.mult}</td>
+      <td style="font-family:'Courier New',monospace;font-size:0.78rem">${jStr}</td>
+      <td>${p.n}H</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('hnmr-sig').textContent =
+    d.peaks.length + ' unique signal' + (d.peaks.length !== 1 ? 's' : '');
+}
+
+// ─────────────────────────────────────────────
+// 13C NMR
+// ─────────────────────────────────────────────
+function renderCnmr(d) {
+  const c = plotColors();
+  const xs = [], ys = [];
+  for (let i = 0; i < d.x.length; i += 5) { xs.push(d.x[i]); ys.push(d.y[i]); }
+
+  const deptPalette = {
+    'C':   getComputedStyle(root).getPropertyValue('--text2').trim(),
+    'CH':  getComputedStyle(root).getPropertyValue('--accent').trim(),
+    'CH₂': getComputedStyle(root).getPropertyValue('--green').trim(),
+    'CH₃': getComputedStyle(root).getPropertyValue('--yellow').trim(),
+  };
+
+  // Small colored markers at peak tops per DEPT type (no bars)
+  const markerTraces = Object.entries(deptPalette).map(([dept, col]) => {
+    const ps = d.peaks.filter(p => p.dept === dept);
+    return {
+      x: ps.map(p => p.shift), y: ps.map(() => 0.97),
+      type: 'scatter', mode: 'markers',
+      marker: { color: col, size: 8, symbol: 'triangle-down' },
+      name: dept,
+      hovertemplate: `${dept} %{x:.1f} ppm<extra></extra>`,
+    };
+  }).filter(t => t.x.length > 0);
+
+  const cLayout = {
+    ...baseLayout(c),
+    xaxis: { ...baseLayout(c).xaxis, autorange: false,
+             range: [240, -10],
+             title: { text: 'Chemical shift (ppm)', standoff: 5 } },
+    yaxis: { ...baseLayout(c).yaxis, range: [0, 1.15],
+             title: { text: 'Intensity', standoff: 5 } },
+    legend: { orientation: 'h', x: 0.01, y: 1.1,
+              bgcolor: 'rgba(0,0,0,0)', font: { color: c.font, size: 10 } },
+    showlegend: true,
+    margin: { ...baseLayout(c).margin, t: 30 },
+  };
+
+  Plotly.newPlot('cnmr-plot', [
+    { x: xs, y: ys, type: 'scatter', mode: 'lines',
+      line: { color: c.trace_c, width: 1.5 },
+      fill: 'tozeroy', fillcolor: hexAlpha(c.trace_c, 0.07),
+      hoverinfo: 'skip', showlegend: false },
+    ...markerTraces,
+  ], cLayout, CFG);
+  document.getElementById('cnmr-plot').on('plotly_doubleclick', function() {
+    Plotly.relayout('cnmr-plot', {'xaxis.range': [240, -10], 'xaxis.autorange': false});
+  });
+
+  const deptCls = { C: 'dept-C', CH: 'dept-CH', 'CH₂': 'dept-CH2', 'CH₃': 'dept-CH3' };
+  document.getElementById('cnmr-tbody').innerHTML = d.peaks.map(p =>
+    `<tr><td>${p.shift.toFixed(1)}</td>
+     <td class="${deptCls[p.dept] || ''}">${p.dept}</td>
+     <td>${p.count}</td></tr>`
+  ).join('');
+  document.getElementById('cnmr-sig').textContent =
+    d.peaks.length + ' unique signal' + (d.peaks.length !== 1 ? 's' : '');
+}
+
+// ─────────────────────────────────────────────
+// IR
+// ─────────────────────────────────────────────
+const IR_BANDS = [
+  [3600,3200,'O–H stretch (alcohol, H-bonded)'],
+  [3500,3300,'N–H stretch (amine)'],
+  [3400,3300,'N–H stretch (amide)'],
+  [3310,3290,'≡C–H stretch (terminal alkyne)'],
+  [3100,3000,'=C–H stretch (aromatic/alkene)'],
+  [3000,2840,'C–H stretch (sp³)'],
+  [2820,2700,'C–H aldehyde (Fermi resonance)'],
+  [2560,2530,'S–H stretch'],
+  [2280,2250,'N=C=O stretch (isocyanate)'],
+  [2260,2200,'C≡N stretch (nitrile)'],
+  [2200,2100,'C≡C stretch (alkyne)'],
+  [1830,1800,'C=O stretch (acyl halide)'],
+  [1830,1750,'C=O stretch (anhydride, 2 bands)'],
+  [1780,1710,'C=O stretch (ester/lactone)'],
+  [1750,1700,'C=O stretch (aldehyde/ketone)'],
+  [1725,1700,'C=O stretch (carboxylic acid)'],
+  [1690,1630,'C=O stretch (amide I)'],
+  [1660,1620,'C=C stretch (alkene)'],
+  [1630,1550,'N–H bend / amide II'],
+  [1610,1450,'C=C ring stretch (aromatic)'],
+  [1560,1340,'N–O stretch (nitro group)'],
+  [1470,1350,'C–H bending (CH₂/CH₃)'],
+  [1300,1050,'C–O–C stretch (ether/ester)'],
+  [1150,1000,'C–O stretch (alcohol)'],
+  [1010, 900,'=C–H out-of-plane (terminal alkene)'],
+  [ 910, 680,'=C–H oop bend (aromatic, diagnostic)'],
+  [ 800, 600,'C–Cl stretch'],
+  [ 700, 500,'C–Br stretch'],
+];
+
+function assignIR(xArr, yArr) {
+  const minima = [];
+  for (let i = 3; i < yArr.length - 3; i++) {
+    if (yArr[i] < yArr[i-1] && yArr[i] < yArr[i+1] && yArr[i] < 83) {
+      // Simple local-min check with a small plateau tolerance
+      if (yArr[i] < Math.min(yArr[i-2], yArr[i+2]))
+        minima.push({ wn: xArr[i], t: yArr[i] });
+    }
+  }
+  minima.sort((a, b) => a.t - b.t);
+  return minima.slice(0, 24).map(m => {
+    let asgn = 'Skeletal / fingerprint vibration';
+    for (const [hi, lo, lbl] of IR_BANDS) {
+      if (m.wn >= lo - 30 && m.wn <= hi + 30) { asgn = lbl; break; }
+    }
+    const inten = m.t < 10 ? 'Very strong' : m.t < 35 ? 'Strong' : m.t < 65 ? 'Medium' : 'Weak';
+    return `<tr><td>${Math.round(m.wn)}</td><td>${asgn}</td><td>${inten}</td></tr>`;
+  }).join('');
+}
+
+function renderIr(d) {
+  const c = plotColors();
+  const xs = [], ys = [];
+  for (let i = 0; i < d.x.length; i += 2) { xs.push(d.x[i]); ys.push(d.y[i]); }
+
+  Plotly.newPlot('ir-plot', [{
+    x: xs, y: ys, type: 'scatter', mode: 'lines',
+    line: { color: c.trace_ir, width: 1.6 },
+    fill: 'tozeroy', fillcolor: hexAlpha(c.trace_ir, 0.07),
+    hovertemplate: '%{x:.0f} cm⁻¹ · %{y:.1f}%T<extra></extra>',
+  }], {
+    ...baseLayout(c),
+    xaxis: {
+      ...baseLayout(c).xaxis, autorange: false, range: [3600, 340],
+      title: { text: 'Wavenumber (cm⁻¹)', standoff: 5 },
+      tickvals: [3500,3000,2500,2000,1800,1600,1400,1200,1000,800,600,400],
+    },
+    yaxis: {
+      ...baseLayout(c).yaxis, range: [-3, 108],
+      title: { text: '% Transmittance', standoff: 5 },
+      tickvals: [0,20,40,60,80,100],
+    },
+    shapes: [{ type:'line', x0:1500, x1:1500, y0:0, y1:108,
+               line:{ color: hexAlpha(c.tick, 0.2), width:1, dash:'dot' } }],
+    annotations: [
+      { x:2550, y:105, text:'Functional Group Region',
+        showarrow:false, font:{ color:c.tick, size:9 }, xanchor:'center' },
+      { x:950,  y:105, text:'Fingerprint Region',
+        showarrow:false, font:{ color:c.tick, size:9 }, xanchor:'center' },
+    ],
+  }, CFG);
+  document.getElementById('ir-plot').on('plotly_doubleclick', function() {
+    Plotly.relayout('ir-plot', {'xaxis.range': [3600, 340], 'xaxis.autorange': false});
+  });
+
+  document.getElementById('ir-tbody').innerHTML = assignIR(d.x, d.y);
+}
+
+// ─────────────────────────────────────────────
+// PRINT REPORT
+// ─────────────────────────────────────────────
+function printReport() {
+  if (!lastData) return;
+  const d = lastData;
+
+  // Build 1H table rows
+  const hnmrRows = d.hnmr.peaks.map(p => {
+    const j = p.j && p.j.length ? p.j.map(v => v.toFixed(1)).join(', ') : '–';
+    return `<tr><td>${p.shift.toFixed(2)}</td><td>${p.mult}</td><td>${j}</td><td>${p.n}H</td></tr>`;
+  }).join('');
+
+  const deptNames = { C:'C (quat)', CH:'CH', 'CH₂':'CH₂', 'CH₃':'CH₃' };
+  const cnmrRows = d.cnmr.peaks.map(p =>
+    `<tr><td>${p.shift.toFixed(1)}</td><td>${deptNames[p.dept] || p.dept}</td><td>${p.count}</td></tr>`
+  ).join('');
+
+  // IR assignments from current table
+  const irRows = Array.from(document.querySelectorAll('#ir-tbody tr')).map(tr =>
+    `<tr>${Array.from(tr.cells).map(td => `<td>${td.textContent}</td>`).join('')}</tr>`
+  ).join('');
+
+  const fgList = d.fg.map(g => g.replace(/_/g,' ')).join(', ');
+
+  // Downsample spectrum data for print
+  function ds(arr, step) { const r=[]; for(let i=0;i<arr.length;i+=step) r.push(arr[i]); return r; }
+  const hX = JSON.stringify(ds(d.hnmr.x,4));
+  const hY = JSON.stringify(ds(d.hnmr.y,4));
+  const cX = JSON.stringify(ds(d.cnmr.x,5));
+  const cY = JSON.stringify(ds(d.cnmr.y,5));
+  const iX = JSON.stringify(ds(d.ir.x,2));
+  const iY = JSON.stringify(ds(d.ir.y,2));
+
+  const win = window.open('', '_blank');
+  if (!win) { alert('Popup blocked — please allow popups for this page and try again.'); return; }
+  win.document.write(`<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<title>NMR & IR Report — ${d.formula}</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"><\/script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;padding:20mm 18mm}
+  h1{font-size:16pt;margin-bottom:4px}
+  .subtitle{font-size:9pt;color:#444;margin-bottom:16px}
+  h2{font-size:11pt;font-weight:700;border-bottom:1.5px solid #000;padding-bottom:3px;
+     margin:20px 0 8px;text-transform:uppercase;letter-spacing:.5px}
+  table{width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:12px}
+  th{background:#e8e8e8;font-weight:700;padding:5px 8px;border:1px solid #999;text-align:left}
+  td{padding:4px 8px;border:1px solid #bbb}
+  tr:nth-child(even) td{background:#f7f7f7}
+  .chart{margin:8px 0 16px;page-break-inside:avoid;height:260px;width:100%}
+  .meta{display:flex;gap:24px;flex-wrap:wrap;margin-bottom:8px;font-size:9pt}
+  .meta span{background:#eee;padding:3px 10px;border-radius:4px;border:1px solid #ccc}
+  @media print{
+    @page{margin:12mm}
+    .no-print{display:none}
+    h2{break-before:auto}
+    .chart{break-inside:avoid}
+  }
+</style></head><body>
+<h1>NMR &amp; IR Spectral Report</h1>
+<div class="subtitle">Predicted spectra — generated ${new Date().toLocaleDateString()}</div>
+<div class="meta">
+  <span><strong>Formula:</strong> ${d.formula}</span>
+  <span><strong>Exact MW:</strong> ${d.mw} Da</span>
+  <span><strong>Functional Groups:</strong> ${fgList || 'none detected'}</span>
+  <span><a href="https://sdbs.db.aist.go.jp/sdbs/cgi-bin/cre_index.cgi?lang=eng&indx=sdbs&key=suf&word=${encodeURIComponent(d.formula)}"
+     target="_blank" rel="noopener"
+     style="color:#1a56db;text-decoration:none;font-weight:600">🔬 Search SDBS ↗</a></span>
+</div>
+
+<h2>¹H NMR (400 MHz)</h2>
+<div class="chart" id="h-chart"></div>
+<table>
+  <thead><tr><th>δ (ppm)</th><th>Multiplicity</th><th>J (Hz)</th><th>Integration</th></tr></thead>
+  <tbody>${hnmrRows}</tbody>
+</table>
+
+<h2>¹³C NMR (100 MHz)</h2>
+<div class="chart" id="c-chart"></div>
+<table>
+  <thead><tr><th>δ (ppm)</th><th>DEPT Type</th><th>Equiv. Carbons</th></tr></thead>
+  <tbody>${cnmrRows}</tbody>
+</table>
+
+<h2>Infrared Spectrum</h2>
+<div class="chart" id="i-chart"></div>
+<table>
+  <thead><tr><th>ν̃ (cm⁻¹)</th><th>Assignment</th><th>Intensity</th></tr></thead>
+  <tbody>${irRows}</tbody>
+</table>
+
+<div id="print-btns" class="no-print" style="margin-top:24px;text-align:center;display:none">
+  <button onclick="window.print()" style="padding:10px 28px;font-size:11pt;cursor:pointer;
+    background:#000;color:#fff;border:none;border-radius:6px">🖨️ Print / Save as PDF</button>
+  &nbsp;
+  <button onclick="window.close()" style="padding:10px 28px;font-size:11pt;cursor:pointer;
+    background:#eee;border:1px solid #bbb;border-radius:6px">✕ Close</button>
+</div>
+<div id="loading" style="text-align:center;padding:20px;font-size:11pt;color:#555">Rendering spectra…</div>
+
+<script>
+window.addEventListener('load', function() {
+const BW = {
+  paper_bgcolor:'#fff', plot_bgcolor:'#fff',
+  font:{color:'#000',family:'Arial,sans-serif',size:10},
+  margin:{t:8,r:12,b:42,l:54},
+  xaxis:{gridcolor:'#ddd',linecolor:'#999',tickcolor:'#999',showgrid:true,zeroline:false},
+  yaxis:{gridcolor:'#ddd',linecolor:'#999',tickcolor:'#999',showgrid:true,zeroline:false},
+  hoverlabel:{bgcolor:'#fff',bordercolor:'#999',font:{color:'#000'}},
+};
+const CFG={displayModeBar:false,staticPlot:true};
+
+// 1H NMR — build sticks and annotations
+const hPeaks = ${JSON.stringify(d.hnmr.peaks)};
+const hSX=[],hSY=[];
+hPeaks.forEach(p=>{hSX.push(p.shift,p.shift,null);hSY.push(0,1.0,null);});
+const hAnnot = hPeaks.map(p=>{
+  const jTxt = p.j&&p.j.length ? 'J='+p.j.map(v=>v.toFixed(1)).join(', ')+' Hz' : '';
+  return {x:p.shift,y:1.04,text:'<b>'+p.n+'H</b>'+(jTxt?'<br><i>'+jTxt+'</i>':''),
+    showarrow:false,font:{size:7,color:'#000',family:'Arial'},
+    xanchor:'center',yanchor:'bottom',align:'center'};
+});
+Plotly.newPlot('h-chart',[
+  {x:${hX},y:${hY},type:'scatter',mode:'lines',line:{color:'#000',width:1.5},fill:'tozeroy',fillcolor:'rgba(0,0,0,0.07)',showlegend:false},
+  {x:hSX,y:hSY,type:'scatter',mode:'lines',line:{color:'#555',width:1.5},showlegend:false,hoverinfo:'skip'},
+],{...BW,
+  width:720,height:240,
+  xaxis:{...BW.xaxis,autorange:false,range:[13,-0.3],title:{text:'Chemical shift (ppm)',standoff:4}},
+  yaxis:{...BW.yaxis,range:[0,1.5],title:{text:'Intensity',standoff:4}},
+  annotations:hAnnot,
+},{...CFG,responsive:false});
+
+// 13C NMR — triangle markers only (no bars)
+const cPeaks = ${JSON.stringify(d.cnmr.peaks)};
+const cMarkers=cPeaks.map(p=>p.shift);
+const cMarkY=cPeaks.map(()=>0.97);
+Plotly.newPlot('c-chart',[
+  {x:${cX},y:${cY},type:'scatter',mode:'lines',line:{color:'#000',width:1.5},fill:'tozeroy',fillcolor:'rgba(0,0,0,0.06)',showlegend:false},
+  {x:cMarkers,y:cMarkY,type:'scatter',mode:'markers',marker:{color:'#000',size:7,symbol:'triangle-down'},showlegend:false},
+],{...BW,
+  width:720,height:240,
+  xaxis:{...BW.xaxis,autorange:false,range:[240,-10],title:{text:'Chemical shift (ppm)',standoff:4}},
+  yaxis:{...BW.yaxis,range:[0,1.15],title:{text:'Intensity',standoff:4}},
+},{...CFG,responsive:false});
+
+// IR
+Plotly.newPlot('i-chart',[{
+  x:${iX},y:${iY},type:'scatter',mode:'lines',
+  line:{color:'#000',width:1.5},fill:'tozeroy',fillcolor:'rgba(0,0,0,0.06)',
+}],{...BW,
+  width:720,height:240,
+  xaxis:{...BW.xaxis,autorange:false,range:[3600,340],
+         title:{text:'Wavenumber (cm⁻¹)',standoff:4},
+         tickvals:[3500,3000,2500,2000,1800,1600,1400,1200,1000,800,600,400]},
+  yaxis:{...BW.yaxis,range:[-3,108],title:{text:'% Transmittance',standoff:4},
+         tickvals:[0,20,40,60,80,100]},
+},{...CFG,responsive:false});
+
+document.getElementById('loading').style.display='none';
+document.getElementById('print-btns').style.display='block';
+}); // end window.onload
+<\/script>
+</body></html>`);
+  win.document.close();
+}
+
+// ─────────────────────────────────────────────
+// SDBS LIVE UPDATE
+// ─────────────────────────────────────────────
+function _setSrcBadge(nmr, state) {
+  // nmr: 'hnmr' or 'cnmr' | state: 'checking' | 'nmrdb' | 'sdbs' | 'predicted'
+  const el = document.getElementById(nmr + '-src-badge');
+  if (!el) return;
+  el.style.display = '';
+  el.className = 'src-badge ' + (state === 'nmrdb' ? 'sdbs' : state);
+  el.textContent = state === 'nmrdb'    ? '🔬 NMRdb ✓'
+                 : state === 'sdbs'     ? '🔬 SDBS ✓'
+                 : state === 'checking' ? '⏳ Checking NMRdb…'
+                 :                        '⚗ Predicted';
+}
+
+async function _pollSdbs(jobId) {
+  const MAX = 25;   // 25 × 2 s = 50 s timeout
+  for (let i = 0; i < MAX; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const res  = await fetch('/sdbs/' + encodeURIComponent(jobId));
+      const job  = await res.json();
+      if (job.status === 'done') {
+        // Re-render both NMR charts with SDBS-corrected data
+        if (job.hnmr) {
+          lastData.hnmr = job.hnmr;
+          renderHnmr(job.hnmr);
+          _setSrcBadge('hnmr', (job.h_src === 'sdbs' || job.h_src === 'nmrdb') ? job.h_src : 'predicted');
+        }
+        if (job.cnmr) {
+          lastData.cnmr = job.cnmr;
+          renderCnmr(job.cnmr);
+          _setSrcBadge('cnmr', job.c_src === 'sdbs' ? 'sdbs' : 'predicted');
+        }
+        // Update SDBS link with direct compound URL if we have sdbsno
+        if (job.sdbsno) {
+          document.getElementById('sdbs-link').href =
+            `https://sdbs.db.aist.go.jp/CompoundView.aspx?sdbsno=${job.sdbsno}`;
+          document.getElementById('sdbs-link').textContent = 'View on SDBS ↗';
+        }
+        return;
+      }
+      if (job.status === 'not_found' || job.status === 'unknown') {
+        _setSrcBadge('hnmr', 'predicted');
+        _setSrcBadge('cnmr', 'predicted');
+        return;
+      }
+    } catch(_) { /* network error — keep polling */ }
+  }
+  // Timed out
+  _setSrcBadge('hnmr', 'predicted');
+  _setSrcBadge('cnmr', 'predicted');
+}
+
+// ─────────────────────────────────────────────
+// UTIL
+// ─────────────────────────────────────────────
+function hexAlpha(hex, a) {
+  // Convert CSS color to rgba for fill
+  const m = hex.match(/^#([0-9a-f]{3,6})$/i);
+  if (!m) return `rgba(100,120,242,${a})`;
+  let h = m[1];
+  if (h.length === 3) h = h.split('').map(c=>c+c).join('');
+  const r = parseInt(h.slice(0,2),16);
+  const g = parseInt(h.slice(2,4),16);
+  const b = parseInt(h.slice(4,6),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+</script>
+</body>
+</html>
