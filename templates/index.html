@@ -599,7 +599,10 @@ tr:hover td { background: rgba(var(--accentRGB),.04); }
         <span class="src-badge predicted" id="hnmr-src-badge" style="display:none">⚗ Predicted</span>
         <span class="sig" id="hnmr-sig"></span>
       </div>
-      <div class="chart-area"><div id="hnmr-plot" style="height:250px"></div></div>
+      <div class="chart-area" style="position:relative">
+        <div id="hnmr-plot" style="height:250px"></div>
+        <span id="hnmr-lb-label" style="position:absolute;top:6px;right:10px;font-size:0.65rem;opacity:0.45;pointer-events:none;font-family:monospace">scroll to adjust width</span>
+      </div>
       <div class="peak-table-wrap">
         <table>
           <thead><tr><th>δ (ppm)</th><th>Multiplicity</th><th>J (Hz)</th><th>Integration</th></tr></thead>
@@ -916,10 +919,50 @@ function renderAll(data) {
 // ─────────────────────────────────────────────
 // 1H NMR
 // ─────────────────────────────────────────────
+// ── Client-side ¹H NMR spectrum builder (for real-time broadening control) ──
+let hnmrBroadening = 0.003;   // ppm  (~1.2 Hz at 400 MHz)
+let _hnmrScrollAttached = false;
+
+function _buildHnmrJS(peaks, w) {
+  const FREQ = 400.0, N = 32001, ppmMin = -1, ppmMax = 15;
+  const step = (ppmMax - ppmMin) / (N - 1);
+  const I = new Float64Array(N);
+  for (const pk of peaks) {
+    const s = pk.shift, n = pk.n, m = pk.mult;
+    const jl = pk.j || [];
+    const J1 = jl[0] ? jl[0]/FREQ : 7/FREQ;
+    const J2 = jl[1] ? jl[1]/FREQ : J1;
+    const J3 = jl[2] ? jl[2]/FREQ : J2;
+    let sub;
+    if      (m.includes('s'))          sub = [[s,1]];
+    else if (m==='d')                  sub = [[s-J1/2,1],[s+J1/2,1]];
+    else if (m==='t')                  sub = [[s-J1,1],[s,2],[s+J1,1]];
+    else if (m==='q')                  sub = [[s-1.5*J1,1],[s-.5*J1,3],[s+.5*J1,3],[s+1.5*J1,1]];
+    else if (m==='quint')              sub = [-2,-1,0,1,2].map((k,i)=>[s+k*J1,[1,4,6,4,1][i]]);
+    else if (m==='sext')               sub = [-2.5,-1.5,-.5,.5,1.5,2.5].map((k,i)=>[s+k*J1,[1,5,10,10,5,1][i]]);
+    else if (m==='sept')               sub = [-3,-2,-1,0,1,2,3].map((k,i)=>[s+k*J1,[1,6,15,20,15,6,1][i]]);
+    else if (m==='dd')                 sub = [[s-J1/2-J2/2,1],[s+J1/2-J2/2,1],[s-J1/2+J2/2,1],[s+J1/2+J2/2,1]];
+    else if (m==='dt'||m==='td')       sub = [[s-J1/2-J2,1],[s-J1/2,2],[s-J1/2+J2,1],[s+J1/2-J2,1],[s+J1/2,2],[s+J1/2+J2,1]];
+    else if (m==='ddd')                sub = [[-1,-1,-1],[1,-1,-1],[-1,1,-1],[1,1,-1],[-1,-1,1],[1,-1,1],[-1,1,1],[1,1,1]].map(([e1,e2,e3])=>[s+e1*J1/2+e2*J2/2+e3*J3/2,1]);
+    else                               sub = [[s,1]];
+    for (const [sp, si] of sub) {
+      const i0 = Math.max(0, Math.floor((sp-15*w-ppmMin)/step));
+      const i1 = Math.min(N-1, Math.ceil((sp+15*w-ppmMin)/step));
+      for (let i = i0; i <= i1; i++) {
+        const dx = (ppmMin + i*step) - sp;
+        I[i] += si * n * 0.12 / (1 + (dx/w)**2);
+      }
+    }
+  }
+  let mx = 0; for (let i=0;i<N;i++) if(I[i]>mx) mx=I[i];
+  const xs=[], ys=[];
+  for (let i=0;i<N;i+=4){ xs.push(ppmMin+i*step); ys.push(mx>0?I[i]/mx:0); }
+  return {x:xs, y:ys};
+}
+
 function renderHnmr(d) {
   const c = plotColors();
-  const xs = [], ys = [];
-  for (let i = 0; i < d.x.length; i += 4) { xs.push(d.x[i]); ys.push(d.y[i]); }
+  const {x: xs, y: ys} = _buildHnmrJS(d.peaks, hnmrBroadening);
 
   const hLayout = {
     ...baseLayout(c),
@@ -937,6 +980,20 @@ function renderHnmr(d) {
   document.getElementById('hnmr-plot').on('plotly_doubleclick', function() {
     Plotly.relayout('hnmr-plot', {'xaxis.range': [13, -0.3], 'xaxis.autorange': false});
   });
+
+  // Scroll-wheel broadening control (attach once)
+  if (!_hnmrScrollAttached) {
+    document.getElementById('hnmr-plot').addEventListener('wheel', function(e) {
+      e.preventDefault(); e.stopPropagation();
+      hnmrBroadening = Math.max(0.001, Math.min(0.06, hnmrBroadening * (e.deltaY > 0 ? 1.22 : 0.82)));
+      if (!lastData || !lastData.hnmr) return;
+      const spec = _buildHnmrJS(lastData.hnmr.peaks, hnmrBroadening);
+      Plotly.restyle('hnmr-plot', {x: [spec.x], y: [spec.y]}, [0]);
+      const lbl = document.getElementById('hnmr-lb-label');
+      if (lbl) lbl.textContent = 'LB: ' + (hnmrBroadening * 400).toFixed(1) + ' Hz';
+    }, {passive: false, capture: true});
+    _hnmrScrollAttached = true;
+  }
 
   // Table with J values
   document.getElementById('hnmr-tbody').innerHTML = d.peaks.map(p => {

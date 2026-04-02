@@ -695,7 +695,7 @@ def predict_hnmr(mol):
         # Convert first (largest) J to ppm; fall back to 7 Hz default
         J_ppm = (j_list[0] / FREQ) if j_list else (7.0 / FREQ)
         J2    = (j_list[1] / FREQ) if len(j_list) > 1 else J_ppm
-        w = 0.014
+        w = 0.003
         if 's' in m:
             sub = [(s, 1)]
         elif m == 'd':
@@ -740,7 +740,7 @@ def _build_hnmr_spectrum(peaks):
         j_list = pk.get('j', [])
         J_ppm = (j_list[0] / FREQ) if j_list else (7.0 / FREQ)
         J2    = (j_list[1] / FREQ) if len(j_list) > 1 else J_ppm
-        w = 0.014
+        w = 0.003
         if 's' in m:
             sub = [(s, 1)]
         elif m == 'd':
